@@ -4,6 +4,14 @@
 class_name Player
 extends CharacterBody3D
 
+@export_category("References")
+@export var head:Node3D
+@export var camera:Camera3D
+@export var animation_player:AnimationPlayer
+@export var collision_shape:CollisionShape3D
+@export var ground_shape:CollisionShape3D
+@export var ceiling_shape:ShapeCast3D
+
 # Input
 const MOUSE_SENS : float = 3.0
 
@@ -32,8 +40,8 @@ var bob_time : float = 0.0
 var bob_current : Vector2
 
 # State machine
-var past_state : String = "air"
-var current_state : String = "air"
+var past_state : Callable = air
+var current_state : Callable = air
 
 func _ready():
 	Game.player = self
@@ -51,12 +59,12 @@ func process_sm(delta : float) -> void:
 	# Show the state on screen
 	$HUD/Log.text = current_state
 	# Call current state method
-	call(current_state, delta)
+	current_state.call(delta)
 	# Check for transitions
 	if current_state != past_state:
 		match current_state:
-			"ground":
-				$AnimationPlayer.play("land")
+			ground:
+				animation_player.play("land")
 	# Update the previous state
 	past_state = current_state
 
@@ -75,14 +83,14 @@ func air(delta):
 	
 	# Check state exit
 	if is_on_floor():
-		current_state = "ground"
+		current_state = ground
 
 # Ground state
 func ground(delta):
 	# Jumping
 	if Input.is_action_pressed("move_jump"):
 		velocity.y = JUMP_FORCE
-		$AnimationPlayer.play("jump")
+		animation_player.play("jump")
 		# $Sounds/Huh.play()
 	# Velocity
 	process_vel(delta, FRICTION)
@@ -95,7 +103,7 @@ func ground(delta):
 	
 	# Check state exit
 	if !is_on_floor():
-		current_state = "air"
+		current_state = air
 	
 # Process velocity
 func process_vel(delta : float, decel : float) -> void:
@@ -131,14 +139,14 @@ func process_vel(delta : float, decel : float) -> void:
 # Crouch walking
 func process_crouch(delta : float) -> void:
 	crouch = float(Input.is_action_pressed("move_crouch")) * 0.5
-	if (height < 1.0 and $Ceiling.is_colliding()):
+	if (height < 1.0 and ceiling_shape.is_colliding()):
 		crouch = 0.5
 	height = lerp(height, clamp(1.0 - crouch, 0.5, 1.0), delta * 10.0)
 	# Height
-	$Ground.shape.length = height + 0.5
-	$Collision.shape.height = height
-	$Head.global_transform.origin = global_transform.origin + Vector3.UP * height * 0.5
-	$Ceiling.global_transform.origin = $Head.global_transform.origin
+	ground_shape.shape.length = height + 0.5
+	collision_shape.shape.height = height
+	head.global_transform.origin = global_transform.origin + Vector3.UP * height * 0.5
+	ceiling_shape.global_transform.origin = head.global_transform.origin
 
 func process_steps(delta : float) -> void:
 	var speed_clamped = remap(hvel.length(), 0.0, MAX_SPEED, 0.0, 1.0)
@@ -148,10 +156,10 @@ func process_steps(delta : float) -> void:
 	# Step sounds
 	if bob_target.y > 0.15 and step.x == 0:
 		step = Vector2i(1, 0)
-		$AnimationPlayer.play("step")
+		animation_player.play("step")
 	if bob_target.y < -0.15 and step.y == 0:
 		step = Vector2i(0, 1)
-		$AnimationPlayer.play("step")
+		animation_player.play("step")
 	
 	# Reset the bobbing if speed is too small
 	if speed_clamped <= 0.1:
@@ -162,8 +170,8 @@ func process_steps(delta : float) -> void:
 	if bob_enabled:
 		bob_current = lerp(bob_current, bob_target, delta * 5.0)
 		bob_current = lerp(bob_current, bob_target, delta * 5.0)
-		$Head/Camera.transform.origin.x = bob_current.y
-		$Head/Camera.transform.origin.y = bob_current.x
+		camera.transform.origin.x = bob_current.y
+		camera.transform.origin.y = bob_current.x
 	
 # Apply velocity
 func push(force : float, direction : Vector3):
@@ -178,8 +186,8 @@ func process_rush() -> void:
 func _unhandled_input(event):
 	if event is InputEventMouseMotion:
 		# Head rotation
-		$Head.rotation.x -= event.relative.y * MOUSE_SENS * 0.001
-		$Head.rotation.x = clamp($Head.rotation.x, -1.5, 1.5)
+		head.rotation.x -= event.relative.y * MOUSE_SENS * 0.001
+		head.rotation.x = clamp(head.rotation.x, -1.5, 1.5)
 		# Body rotation
 		rotation.y -= event.relative.x * MOUSE_SENS * 0.001
 		rotation.y = wrapf(rotation.y, 0.0, TAU)
